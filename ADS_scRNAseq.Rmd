@@ -1,0 +1,323 @@
+---
+title: "scRNAseq analysis of AGS"
+author: "Sayaka Matsushima"
+date: "2026-04-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Seurat)
+```
+
+#データの読み込み
+```{r}
+seurat_obj <-readRDS("Integration#1.rds")
+```
+
+seurat_obj内のorig.iedntを確認する
+```{r}
+table(seurat_obj$orig.ident)
+```
+
+Sampleを確認する
+```{r}
+table(seurat_obj$Sample)
+```
+SampleID_paperを確認する
+```{r}
+table(seurat_obj$SampleID_paper)
+```
+
+C1,C2,P1,P2_before_treatmentだけを比較したいため抜き出す
+```{r}
+seurat_obj <- UpdateSeuratObject(seurat_obj)
+```
+
+```{r}
+seurat_obj2 <- subset(seurat_obj, SampleID_paper %in% c("C1", "C2", "P1", "P2_before_treatment"))
+```
+
+抜き出し後のSampleID_paperを確認する
+```{r}
+table(seurat_obj2$SampleID_paper)
+```
+
+=C1,C2,P1,P2_before_treatmentだけが抜き出せていることが確認された。
+
+seurat_obj2$SampleID_paperの要素から、要素数が0のものを削除する
+```{r}
+seurat_obj2$SampleID_paper <- droplevels(seurat_obj2$SampleID_paper)
+```
+
+P2_before_treatmentをP2に変更する
+```{r}
+levels(seurat_obj2$SampleID_paper)[levels(seurat_obj2$SampleID_paper) == "P2_before_treatment"] <- "P2"
+```
+
+処理ができているかを確認する
+```{r}
+table(seurat_obj2$SampleID_paper)
+```
+
+
+UMAPでクラスタリングの結果を確認する
+```{r}
+DimPlot(seurat_obj2, reduction = "umap", group.by = "SampleID_paper")
+```
+
+C1,C2,P1,P2の４つのグループそれぞれ単体でUMAPをかく
+```{r}
+DimPlot(seurat_obj2, reduction = "umap", split.by = "SampleID_paper")
+```
+
+MacroClusterを確認する
+```{r}
+table(seurat_obj2$MacroCluster)
+```
+
+MacroClusterをグループ分けしてUMAPをかく
+```{r}
+DimPlot(seurat_obj2, reduction = "umap", group.by = "MacroCluster")
+```
+
+split.byをSampleID_paperにして、group.byをMacroClusterにしてUMAPをかく
+```{r}
+DimPlot(seurat_obj2, reduction = "umap", group.by = "MacroCluster", split.by = "SampleID_paper",ncol=2)
+```
+
+クラスターごとの細胞数を確認する
+```{r}
+table(seurat_obj2$MacroCluster, seurat_obj2$SampleID_paper)
+```
+
+サンプルごとに一万細胞にスケーリングする
+```{r}
+table_raw <- table(seurat_obj2$MacroCluster, seurat_obj2$SampleID_paper)
+table_scaled <- sweep(table_raw, 2, colSums(table_raw) / 10000, FUN = "/")
+table_scaled <- round(table_scaled, 1)
+table_scaled
+```
+
+NK/MAIT/Tgdをぬきだす
+```{r}
+NK_MAIT_Tgd <- subset(seurat_obj2, MacroCluster %in% c("NK/MAIT/Tgd"))
+```
+
+DEGを見つける。(C1,C2)vs(P1,P2)
+```{r}
+DEG <- FindMarkers(NK_MAIT_Tgd, ident.2 = c("C1", "C2"), ident.1 = c("P1", "P2"), group.by = "SampleID_paper")
+head(DEG)
+```
+
+DEGの中で、p_val_adjが0.05未満、abs(avg_log2FC)>=1のものを抜き出す
+```{r}
+DEG_sig <- DEG[DEG$p_val_adj < 0.05 & abs(DEG$avg_log2FC) >= 1, ]
+head(DEG_sig)
+```
+
+avg_log2FCの順でソートし、20遺伝子を表示する
+```{r}
+DEG_sig <- DEG_sig[order(DEG_sig$avg_log2FC, decreasing = TRUE), ]
+head(DEG_sig, 20)
+```
+
+```{r}
+tail(DEG_sig, 20)
+```
+
+volcano plotをかく
+```{r}
+library(ggplot2)
+DEG$significant <- "Not Significant"
+DEG$significant[DEG$p_val_adj < 0.05 & abs(DEG$avg_log2FC) >= 1] <- "Significant"
+ggplot(DEG, aes(x = avg_log2FC, y = -log10(p_val_adj), color = significant)) +
+  geom_point() +
+  scale_color_manual(values = c("Not Significant" = "grey", "Significant" = "red")) +
+  theme_minimal() +
+  labs(title = "Volcano Plot", x = "Average Log2 Fold Change", y = "-Log10 Adjusted P-value") +
+  theme(legend.title = element_blank())
+```
+
+UMAPを確認する、SampleID_paperでsplit
+```{r}
+DimPlot(NK_MAIT_Tgd, reduction = "umap", split.by = "SampleID_paper", group.by = "MacroCluster")
+```
+
+UMAP上で確認する、MX1をFeaturePlotで確認する
+```{r}
+FeaturePlot(NK_MAIT_Tgd, features = "MX1")
+```
+
+VlnPlotで MX1を確認する
+```{r}
+VlnPlot(NK_MAIT_Tgd, features = "MX1", group.by = "SampleID_paper")
+```
+
+OAS1をVlnPlotで確認する
+```{r}
+VlnPlot(NK_MAIT_Tgd, features = "OAS1", group.by = "SampleID_paper")
+```
+
+IFI33LをVlnPlotで確認する
+```{r}
+VlnPlot(NK_MAIT_Tgd, features = "IFI44L", group.by = "SampleID_paper")
+```
+
+DEG_sigからpct.1>=0.5のものを抜き出す
+```{r}
+DEG_sig_pct <- DEG_sig[DEG_sig$pct.1 >= 0.5, ]
+DEG_sig_pct
+```
+
+RPL28をVlnPlotで確認する
+```{r}
+VlnPlot(NK_MAIT_Tgd, features = "RPL28", group.by = "SampleID_paper", pt.size = 0)
+```
+
+CD52をVlnPlotで確認する
+```{r}
+VlnPlot(NK_MAIT_Tgd, features = "CD52", group.by = "SampleID_paper", pt.size = 0)
+```
+
+I型インターフェロン応答の評価を行う。
+https://www.gsea-msigdb.org/gsea/msigdb/cards/GOBP_RESPONSE_TO_TYPE_I_INTERFERONから、GOBP_RESPONSE_TO_TYPE_I_INTERFERON.v2026.1.Hs.grpを読み込む
+
+```{r}
+IFNI_gene_set <- read.table("./GOBP_RESPONSE_TO_TYPE_I_INTERFERON.v2026.1.Hs.grp", header = FALSE, stringsAsFactors = FALSE, comment.char = "#" )
+IFNI_genes <- IFNI_gene_set$V1
+head(IFNI_genes)
+```
+
+seurat_obj2の遺伝子に絞り、module scoreを計算する
+```{r}
+IFNI_genes_in_data <- IFNI_genes[IFNI_genes %in% rownames(seurat_obj2)]
+seurat_obj2 <- AddModuleScore(seurat_obj2, features = list(IFNI_genes_in_data), name = "IFNI_Score")
+```
+
+IFNI_ScoreをVlnPlotで確認する
+```{r}
+VlnPlot(seurat_obj2, features = "IFNI_Score1", split.by = "SampleID_paper", group.by = "MacroCluster", pt.size = 0)
+```
+
+C1とC2をCtrl,P1とP2をAGSとしてSampleID_paper2を作成する
+```{r}
+seurat_obj2$SampleID_paper2 <- ifelse(seurat_obj2$SampleID_paper %in% c("C1", "C2"), "Ctrl", "AGS")
+table(seurat_obj2$SampleID_paper2)
+```
+
+VlnPlotでIFNI_Score1を確認する
+```{r}
+seurat_obj2$SampleID_paper2 <- factor(seurat_obj2$SampleID_paper2, levels = c("Ctrl", "AGS"))
+VlnPlot(seurat_obj2, features = "IFNI_Score1", split.by = "SampleID_paper2", group.by = "MacroCluster", pt.size = 0, cols = c("Ctrl" = "blue", "AGS" = "red"))
+```
+
+MacroClusterごとに2群を比較する、結果はttest_resultに保存する
+```{r}
+ttest_result<-list()
+library(dplyr)
+```
+
+```{r}
+for (cluster in unique(seurat_obj2$MacroCluster)) {
+  cluster_cells <- subset(seurat_obj2, MacroCluster == cluster)
+  test_result <- t.test(cluster_cells$IFNI_Score1 ~ cluster_cells$SampleID_paper2)
+  cat("MacroCluster:", cluster, "p-value:", test_result$p.value, "\n")
+  ttest_result[[cluster]] <- test_result$p.value
+} 
+```
+
+平均の差を確認する、結果はmean_diff_resultに保存する
+```{r}
+mean_diff_result <- list()
+for (cluster in unique(seurat_obj2$MacroCluster)) {
+  cluster_cells <- subset(seurat_obj2, MacroCluster == cluster)
+  mean_ctrl <- mean(cluster_cells$IFNI_Score1[cluster_cells$SampleID_paper2 == "Ctrl"], na.rm = TRUE)
+  mean_ags <- mean(cluster_cells$IFNI_Score1[cluster_cells$SampleID_paper2 == "AGS"], na.rm = TRUE)
+  cat("MacroCluster:", cluster, "Mean Ctrl:", mean_ctrl, "Mean AGS:", mean_ags, "\n")
+  mean_diff_result[[cluster]] <- list(mean_ctrl = mean_ctrl, mean_ags = mean_ags, diff = mean_ags - mean_ctrl)
+}
+```
+
+VLN plotを再描画, t.testで p<0.01なら**, p<0.05なら*をつける
+```{r}
+library(Seurat)
+
+p <- VlnPlot(
+  seurat_obj2,
+  features = "IFNI_Score1",
+  split.by = "SampleID_paper2",
+  group.by = "MacroCluster",
+  pt.size = 0,
+  cols = c("Ctrl" = "blue", "AGS" = "red"),
+  y.max = max(seurat_obj2$IFNI_Score1, na.rm = TRUE) * 1.1,
+) + 
+labs(
+  title = "IFNI_Score1, **; p<0.01 && abs(meSan_diff) > 0.03"
+) 
+
+annot_df <- data.frame()
+
+for (cluster in names(ttest_result)) {
+  
+  p_value <- ttest_result[[cluster]]
+  
+  label <- ""
+  if (p_value < 0.01　&& abs(mean_diff_result[[cluster]]$diff) > 0.03) {
+    label <- "**"
+  } else if (p_value < 0.05 && abs(mean_diff_result[[cluster]]$diff) > 0.03) {
+    label <- "*"
+  }
+  
+  if (label != "") {
+    y_pos <- max(seurat_obj2$IFNI_Score1[seurat_obj2$MacroCluster == cluster], na.rm = TRUE)
+    
+    annot_df <- rbind(
+      annot_df,
+      data.frame(
+        MacroCluster = cluster,
+        label = label,
+        y = y_pos 
+      )
+    )
+  }
+}
+
+
+p + geom_text(
+  data = annot_df,
+  aes(x = MacroCluster, y = y, label = label),
+  inherit.aes = FALSE
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
