@@ -97,12 +97,12 @@ library(dplyr)
 
 ```
 .
-├── ADS_scRNAseq.Rmd                              # メイン解析ノートブック
-├── GOBP_RESPONSE_TO_TYPE_I_INTERFERON.v2026.1.Hs.grp  # MSigDB 遺伝子セット
+├── AGS_scRNAseq.Rmd                              
+├── AGS_scRNAseq.html
 └── README.md
 ```
 
-> **Note:** 元データ `Integration#1.rds` は元データ(GEO:GSE220764)よりダウンロード。
+> **Note:** 元データセットは**GEO:GSE220764**よりダウンロード。
 
 ---
 
